@@ -211,8 +211,8 @@ def compute_br(H, dist3_pairs, annotations, Cache, d = 0):
 	if annotations_t in Cache:
 		return Cache[annotations_t]
 
-	if not H.is_2club(dist3_pairs, annotations, 2):
-		return []
+##	if not H.is_2club(dist3_pairs, annotations, 2):
+##		return []
 	reduce(H, dist3_pairs, annotations)
 
 	L = []
@@ -233,12 +233,9 @@ def compute_br(H, dist3_pairs, annotations, Cache, d = 0):
 			annotations2[e] = 0
 			L2 = compute_br(H, dist3_pairs, annotations2, Cache, d+1)
 
-			if L1 != []:
-				for X in L1:
-					for Y in L2:
-						L.append(X+Y)
-			else:
-				L = L+L2
+			for X in L1:
+				for Y in L2:
+					L.append(X+Y)
 
 			L = remove_subsumed(L)
 
@@ -306,22 +303,23 @@ def lstr(L,E):
 		L2 = ['{'+','.join([estr(E[x]) for x in X])+'}' for X in L]
 	return ' '.join(L2)
 
-def generate_rule(E, dist3_pairs, forbidden_edges, forbidden_vertices, maxd, Cache, depth = 0):
+def generate_rule(E, dist3_pairs, forbidden_edges, forbidden_vertices, Cache, depth = 0):
 	key = (tuple(E), tuple(forbidden_edges), tuple(forbidden_vertices), tuple(dist3_pairs))
 	if key in Cache:
 		return Cache[key]
 	indent = " "*(depth*2)
 
 	H = Graph_v(E) if vertex_deletion else Graph_e(E)
-	X,L = compute_branching_number(H, dist3_pairs)
+	if gramm:
+		X,L = compute_br1(H, dist3_pairs)
+	else:
+		X,L = compute_branching_number(H, dist3_pairs)
 	output = indent+f"Branch on {lstr(L,E)} ({bn(X)})\n"
 	if X < stop_value:
 		output = indent+f"Branch on {lstr(L,E)} ({bn(X)})\n"
 		Cache[key] = X,output
 		return X,output
 	if depth == max_depth:
-		if gramm:
-			X,L = compute_br1(H, dist3_pairs)
 		output = indent+f"Branch on {lstr(L,E)} ({bn(X)})\n"
 		Cache[key] = X,output
 		return X,output
@@ -330,8 +328,6 @@ def generate_rule(E, dist3_pairs, forbidden_edges, forbidden_vertices, maxd, Cac
 	potential_pairs = [x for x in all_pairs if x not in dist3_pairs]
 
 	if potential_pairs == []:
-		if gramm:
-			X,L = compute_br1(H, dist3_pairs)
 		output = indent+f"Branch on {lstr(L,E)} ({bn(X)})\n"
 		Cache[key] = X,output
 		return X,output
@@ -352,16 +348,15 @@ def generate_rule(E, dist3_pairs, forbidden_edges, forbidden_vertices, maxd, Cac
 	for pair in potential_pairs:
 		output2 = ""
 		X1 = 0
-		if H.degree(pair[0]) <= maxd and H.degree(pair[1]) <= maxd:
-			output2 += indent+f"If δ({vstr(pair[0])},{vstr(pair[1])}) = 3\n"
-			X1,O = generate_rule(E, dist3_pairs+[pair], forbidden_edges, forbidden_vertices, maxd, Cache, depth+1)
-			output2 += O
+		output2 += indent+f"If δ({vstr(pair[0])},{vstr(pair[1])}) = 3\n"
+		X1,O = generate_rule(E, dist3_pairs+[pair], forbidden_edges, forbidden_vertices, Cache, depth+1)
+		output2 += O
 
 		X2 = 0
 		forbidden_edges3 = forbidden_edges[:]
 		if pair not in forbidden_edges and pair[0] not in forbidden_vertices and pair[0] not in forbidden_vertices:
 			output2 += indent+f"If δ({vstr(pair[0])},{vstr(pair[1])}) = 1\n"
-			X2,O = generate_rule(E+[pair], dist3_pairs, forbidden_edges, forbidden_vertices, maxd, Cache, depth+1)
+			X2,O = generate_rule(E+[pair], dist3_pairs, forbidden_edges, forbidden_vertices, Cache, depth+1)
 			output2 += O
 			forbidden_edges3.append(pair)
 
@@ -371,7 +366,7 @@ def generate_rule(E, dist3_pairs, forbidden_edges, forbidden_vertices, maxd, Cac
 			edge = make_pair(v,pair[1])
 			if edge not in forbidden_edges3 and edge[0] not in forbidden_vertices and edge[1] not in forbidden_vertices:
 				output2 += indent+f"If δ({vstr(pair[0])},{vstr(pair[1])}) = 2 and {vstr(edge[0])},{vstr(edge[1])} are adjacent\n"
-				X3b,O = generate_rule(E+[edge], dist3_pairs, forbidden_edges3, forbidden_vertices, maxd, Cache, depth+1)
+				X3b,O = generate_rule(E+[edge], dist3_pairs, forbidden_edges3, forbidden_vertices, Cache, depth+1)
 				X3 = max(X3, X3b)
 				output2 += O
 
@@ -379,11 +374,12 @@ def generate_rule(E, dist3_pairs, forbidden_edges, forbidden_vertices, maxd, Cac
 				# since we check the case that 'edge' is an edge in G in the recursive call above,
 				# we can assume in the followng recursive calls that 'edge' is not an edge in G
 				forbidden_edges3.append(edge)
+
 		for v in H.adj[pair[1]]:
 			edge = make_pair(v,pair[0])
 			if edge not in forbidden_edges3 and edge[0] not in forbidden_vertices and edge[1] not in forbidden_vertices:
 				output2 += indent+f"If δ({vstr(pair[0])},{vstr(pair[1])}) = 2 and {vstr(edge[0])},{vstr(edge[1])} are adjacent\n"
-				X3b,O = generate_rule(E+[edge], dist3_pairs, forbidden_edges3, forbidden_vertices, maxd, Cache, depth+1)
+				X3b,O = generate_rule(E+[edge], dist3_pairs, forbidden_edges3, forbidden_vertices, Cache, depth+1)
 				X3 = max(X3, X3b)
 				output2 += O
 				forbidden_edges3.append(edge)
@@ -396,7 +392,7 @@ def generate_rule(E, dist3_pairs, forbidden_edges, forbidden_vertices, maxd, Cac
 				edge2 = make_pair(pair[1],v)
 				if edge1 not in forbidden_edges3 and edge2 not in forbidden_edges3:
 					output2 += indent+f"If δ({vstr(pair[0])},{vstr(pair[1])}) = 2 and {vstr(v)} is adjacent to {vstr(pair[0])},{vstr(pair[1])}\n"
-					X3b,O = generate_rule(E+[edge1,edge2], dist3_pairs, forbidden_edges3, forbidden_vertices, maxd, Cache, depth+1)
+					X3b,O = generate_rule(E+[edge1,edge2], dist3_pairs, forbidden_edges3, forbidden_vertices, Cache, depth+1)
 					X3 = max(X3, X3b)
 					output2 += O
 
@@ -407,7 +403,7 @@ def generate_rule(E, dist3_pairs, forbidden_edges, forbidden_vertices, maxd, Cac
 		e2 = make_pair(pair[1],v)
 		if e1 not in forbidden_edges3 and e2 not in forbidden_edges3 and pair[0] not in forbidden_vertices and pair[1] not in forbidden_vertices:
 			output2 += indent+f"Otherwise, there is a vertex {vstr(v)} which is adjacent to {vstr(pair[0])},{vstr(pair[1])}\n"
-			X4,O = generate_rule(E+[e1,e2], dist3_pairs, forbidden_edges3, forbidden_vertices, maxd, Cache, depth+1)
+			X4,O = generate_rule(E+[e1,e2], dist3_pairs, forbidden_edges3, forbidden_vertices, Cache, depth+1)
 			output2 += O
 
 		Y = max(X1,X2,X3,X4)
@@ -420,226 +416,113 @@ def generate_rule(E, dist3_pairs, forbidden_edges, forbidden_vertices, maxd, Cac
 	Cache[key] = X,output
 	return X,output
 
-def generate_rule1(E, dist3_pairs, forbidden_edges, forbidden_vertices, maxd = 1000):
+def generate_rule1(E, dist3_pairs, forbidden_edges, forbidden_vertices):
 	E = [(min(x),max(x)) for x in E]
 	forbidden_edges = [(min(x),max(x)) for x in forbidden_edges]
-	X,O = generate_rule(E, dist3_pairs, forbidden_edges, forbidden_vertices, maxd, {})
+	X,O = generate_rule(E, dist3_pairs, forbidden_edges, forbidden_vertices, {})
 	print(O)
-	return X
+	return X,O.count("Branch")
 
 max_depth = 10
 vertex_deletion = True
-gramm = True
+gramm = False
 
 for x in sys.argv[1:]:
 	if x == "-e":
 		vertex_deletion = False
 	elif x == "-g":
-		gramm = False
+		gramm = True
+
+E0 = [(0,1),(1,2),(2,3)]
+E1 = E0+[(3,4)]
+E2 = E1+[(0,5)]
 
 if vertex_deletion:
-	stop_value = 3.08
+	stop_value = 3.1
 	X = []
 
-##### There is a restricted P that intersects 0123
-
-## P contains exactly 1 vertex from 0123
-
-# 2 in P (the case 1 in P is symmetric, so we don't need to handle it)
-# P=2456
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(2,4),(4,5),(5,6)]
-	X.append(generate_rule1(E, [(0,3),(2,6)], [], []))
-
-# P=4256
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(4,2),(2,5),(5,6)]
-	X.append(generate_rule1(E, [(0,3),(4,6)], [], []))
-
-# 3 in P
-# P=3456
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(3,4),(4,5),(5,6)]
-	X.append(generate_rule1(E, [(0,3),(3,6)], [], []))
-
-# P=4356
-# This case is handled by Rule 2
-
-## P contains exactly 2 vertices from 0123
-
-# 12 in P
-# P = 1245
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(2,4),(4,5)]
-	X.append(generate_rule1(E, [(0,3),(1,5)], [], []))
-
-# P = 4125
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(4,1),(2,5)]
-	X.append(generate_rule1(E, [(0,3),(4,5)],[], []))
-
-# 23 in P
-# P = 2345
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(3,4),(4,5)]
-	X.append(generate_rule1(E, [(0,3),(2,5)], [], []))
-
-# P = 4235
-# This case is handled by Rule 5
-
-# P = 3245
-# A rule for this case has large BN, so we do not use it
-#	E = [(0,1),(1,2),(2,3),(2,4),(4,5)]
-#	X.append(generate_rule1(E, [(0,3),(3,5)], [], []))
-
-# 13 in P
-# P = 1453
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(1,4),(4,5),(5,3)]
-	X.append(generate_rule1(E, [(0,3),(1,3)], [], []))
-
-# P = 3415
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(1,4),(3,4),(1,5)]
-	X.append(generate_rule1(E, [(0,3),(3,5)], [], []))
-
-# P = 1435
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(1,4),(3,4),(3,5)]
-	X.append(generate_rule1(E, [(0,3),(1,5)], [], []))
-
-# 03 in P
-# P = 0453
-# A rule for this case has large BN, so we do not use it
-#	E = [(0,1),(1,2),(2,3),(0,4),(4,5),(5,3)]
-#	X.append(generate_rule1(E, [(0,3)], [], []))
-
-## P contains exactly 3 vertices from 0123
-
-# The rules for the following cases have large BN, so we do not use them
-# 123 in P
-# P = 1234
-#	E = [(0,1),(1,2),(2,3),(3,4)]
-#	X.append(generate_rule1(E, [(0,3),(1,4)], [], []))
-
-# P = 3214
-#	E = [(0,1),(1,2),(2,3),(1,4)]
-#	X.append(generate_rule1(E, [(0,3),(3,4)], [], []))
-
-# 013 in P
-# P = 1243
-#	E = [(0,1),(1,2),(2,3),(1,4),(4,3)]
-#	X.append(generate_rule1(E, [(0,3)], [], []))
-
-
-###### 0 has degree 1
-
-## There is a restricted path P = 1234
-# There is an induced P4 P' whose endpoints are adjacent to 1
-
-# P' = 5,2,...
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(3,4),(1,5),(5,2)]
-	X.append(generate_rule1(E, [(0,3),(1,4)], [], [0]))
-
-# P' = 5,3
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(3,4),(1,5),(5,3)]
-	X.append(generate_rule1(E, [(0,3),(1,4)], [], [0]))
-
-# P' = 5,4
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(3,4),(1,5),(5,4)]
-	X.append(generate_rule1(E, [(0,3),(1,4)], [], [0]))
-
-# P' = 5,6,...
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(3,4),(1,5),(5,6)]
-	X.append(generate_rule1(E, [(0,3),(1,4)], [], [0]))
-
-## There is a restricted path P = 4123
-
-# There is a restricted path P' that contains 0 and not 3
-# P' = 0145
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(1,4),(4,5)]
-	X.append(generate_rule1(E, [(0,3),(3,4),(0,5)], [], [0]))
-
-# P' = 0156
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(1,4),(1,5),(5,6)]
-	X.append(generate_rule1(E, [(0,3),(3,4),(0,6)], [], [0]))
-
-# P' = 0125
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(1,4),(2,5)]
-	X.append(generate_rule1(E, [(0,3),(3,4),(0,5)], [], [0]))
-
-# There is an induced P4 P' whose endpoints are adjacent to 3
-
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(1,4),(3,5),(5,1)]
-	X.append(generate_rule1(E, [(0,3),(3,4)], [], [0]))
-
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(1,4),(3,5),(5,2)]
-	X.append(generate_rule1(E, [(0,3),(3,4)], [], [0]))
-
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(1,4),(3,5),(5,4)]
-	X.append(generate_rule1(E, [(0,3),(3,4)], [], [0]))
-
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(1,4),(3,5),(5,6)]
-	X.append(generate_rule1(E, [(0,3),(3,4)], [], [0]))
-
-###### 0,3 have degrees at least 2
-
-# 0 has degree >= 3
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(3,4),(0,5),(0,6)]
+	print("Rule",len(X)+1)
+	E = E1 + [(3,5)]
 	X.append(generate_rule1(E, [(0,3)], [], []))
 
-## There is a restriced path P that contains 1 and not 0
+# Case 1: deg(0)=deg(3)=2
 
-# P = 1234
+# 5 is adjacent to 2
+	print("Rule",len(X)+1)
+	E = E2 + [(5,2)]
+	X.append(generate_rule1(E, [(0,3)], [], [0,3]))
 
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(3,4),(0,5)]
-	X.append(generate_rule1(E, [(0,3),(1,4)], [], [0,1,3], 2))
+# a vertex 6 that is adjacent to 2 and not to 1
+	print("Rule",len(X)+1)
+	E = E2 + [(2,6)]
+	X.append(generate_rule1(E, [(0,3)], [(1,6)], [0,3]))
 
-# P = x123
+# The next rules handle the case that there is no vertex that is adjacent to 2 and 3.
 
-# P = 5123
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(3,4),(0,5),(1,5)]
-	X.append(generate_rule1(E, [(0,3),(3,5)], [], [0,3,5], 2))
+# no edges 51 or 42.
+	print("Rule",len(X)+1)
+	E = E2
+	X.append(generate_rule1(E, [(0,3)], [], [0,1,2,3]))
 
-# P = 6123
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(3,4),(0,5),(1,6)]
-	X.append(generate_rule1(E, [(0,3),(3,6)], [], [0,3], 2))
+# an edge 51 exists but not 42.
+# We check the two possible connections of these vertices to the rest of the graph
+# Either there is an edge 46 or an edge 56
+# (if neither edge exists than we can use a reduction rule)
+	print("Rule",len(X)+1)
+	E = E2 + [(5,1),(5,6)]
+	X.append(generate_rule1(E, [(0,3)], [], [0,1,2,3]))
 
-# There is an induced P4 P whose endpoints are adjacent to 0
+	print("Rule",len(X)+1)
+	E = E2 + [(5,1),(4,6)]
+	X.append(generate_rule1(E, [(0,3)], [], [0,1,2,3]))
 
-# P = 14x5
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(3,4),(0,5),(1,4)]
-	X.append(generate_rule1(E, [(0,3)], [(1,5),(5,6)], [0,3], 2))
+# The next rules handle the case that there is at least one vertex that is adjacent to 2 and 3.
 
-# P = 16x5
-	print("Rule",len(X)+2)
-	E = [(0,1),(1,2),(2,3),(3,4),(0,5),(1,6)]
-	X.append(generate_rule1(E, [(0,3)], [(1,5),(4,5)], [0,3], 2))
+	print("Rule",len(X)+1)
+	E = E2 + [(1,6),(2,6)]
+	X.append(generate_rule1(E, [(0,3)], [(5,1)], [0,3]))
 
-	for i in range(len(X)):
-		print(f"Rule {i+2} BN = {bn(X[i])}")
-	print(f"max BN = {bn(max(X))}")
+	print("Rule",len(X)+1)
+	E = E2 + [(1,5),(2,4),(1,6),(2,6),(5,6)]
+	X.append(generate_rule1(E, [(0,3)], [], [0,3]))
+
+	print("Rule",len(X)+1)
+	E = E2 + [(1,5),(2,4),(1,6),(2,6),(5,7)]
+	X.append(generate_rule1(E, [(0,3)], [], [0,3]))
+
+# Case 2: deg(0)=1, deg(3)=1
+
+	print("Rule",len(X)+1)
+	E = E0 + [(1,4),(4,5)]
+	X.append(generate_rule1(E, [(0,3)], [(2,4)], [0,3]))
+
+# Case 3: deg(0)=1, deg(3)=2
+
+	print("Rule",len(X)+1)
+	E = E1 + [(2,5)]
+	X.append(generate_rule1(E, [(0,3)], [(1,5)], [0,3]))
+
+	print("Rule",len(X)+1)
+	E = E1 + [(4,5)]
+	X.append(generate_rule1(E, [(0,3)], [(1,5)], [0,3]))
+
+	print("Rule",len(X)+1)
+	E = E1 + [(1,5),(5,6)]
+	X.append(generate_rule1(E, [(0,3)], [(1,6)], [0,3]))
 
 else:
 	stop_value = 2.55
+	X = []
 
+	print("Rule",len(X)+1)
 	E = [(0,1),(1,2),(2,3),(3,4)]
-	print("Rule 1")
-	X = generate_rule1(E, [(0,3)], [], [])
-	print("Rule 1 BN =",bn(X))
+	X.append(generate_rule1(E, [(0,3)], [], []))
+
+	print("Rule",len(X)+1)
+	E = [(0,1),(1,2),(2,3),(2,4)]
+	X.append(generate_rule1(E, [(0,3)], [(1,4)], [0,3]))
+
+
+for i in range(len(X)):
+	print(f"Rule {i+1} BN = {bn(X[i][0])} cases = {X[i][1]}")
+print(f"max BN = {bn(max(x[0] for x in X))}")
